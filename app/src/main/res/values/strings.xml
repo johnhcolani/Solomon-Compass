@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">SolomonCompass</string>
+    <string name="prayer">Prayer</string>
+    <string name="prayer_1">God of Israel, let your word that you promised your servant David my father come true.\n\n1 Kings</string>
+
+    <string name="prayer_2">But will God really dwell on earth? The heavens, even the highest heaven, cannot contain you. How much less this temple I have built!</string>
+    <string name="prayer_3">Yet give attention to your servant’s prayer and his plea for mercy, Lord my God. Hear the cry and the prayer that your servant is praying in your presence this day!</string>
+    <string name="prayer_4">May your eyes be open toward this temple night and day, this place of which you said, ‘My Name shall be there,’ so that you will hear the prayer your servant prays toward this place!</string>
+
+
+
 </resources>

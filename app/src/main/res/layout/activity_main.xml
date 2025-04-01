@@ -40,12 +40,11 @@
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"/>
 
-    <FrameLayout
-        android:id="@+id/compass_container"
+    <com.johncolani.solomoncompass.CompassView
+        android:id="@+id/compass_view"
         android:layout_width="240dp"
         android:layout_height="240dp"
         android:layout_gravity="center"
-        android:layout_margin="16dp"
-        android:background="#FF808080"/>
+        android:layout_margin="16dp"/>
 
 </LinearLayout>

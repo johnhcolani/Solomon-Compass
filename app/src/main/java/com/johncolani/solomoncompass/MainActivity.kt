@@ -1,69 +1,217 @@
 package com.johncolani.solomoncompass
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
+import android.os.Looper
+import android.util.Log
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var exoPlayer: ExoPlayer
+    private lateinit var sensorManager: SensorManager
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var compassView: CompassView
+
+    private val viewModel: CompassViewModel by viewModels()
+
+    // Sensor data buffers
+    private val accelerometerReading = FloatArray(3)
+    private val magnetometerReading = FloatArray(3)
+    private val rotationMatrix = FloatArray(9)
+    private val orientationAngles = FloatArray(3)
+
+    // Location constants
+    private val jerusalemLat = 31.7683
+    private val jerusalemLon = 35.2137
+    private val locationRequest = LocationRequest.Builder(
+        Priority.PRIORITY_HIGH_ACCURACY,
+        5000
+    ).build()
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) startLocationUpdates()
+        else Log.e("MainActivity", "Location permission denied")
+    }
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            result.lastLocation?.let { location ->
+                viewModel.targetBearing = calculateBearing(
+                    location.latitude,
+                    location.longitude
+                )
+                updateCompass()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Set up the video player
+        initializeComponents()
         setupVideoPlayer()
-
-        // Set up the ViewPager2 for prayers
         setupViewPager()
+        checkPermissions()
+    }
+
+    private fun initializeComponents() {
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        compassView = findViewById(R.id.compass_view)
+
+        registerSensors()
+    }
+
+    private fun registerSensors() {
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+        sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
     }
 
     private fun setupVideoPlayer() {
-        val playerView = findViewById<PlayerView>(R.id.video_player)
-
-        // Initialize exoPlayer
-        exoPlayer = ExoPlayer.Builder(this).build()
+        val playerView: PlayerView = findViewById(R.id.video_player)
+        exoPlayer = ExoPlayer.Builder(this).build().apply {
+            setMediaItem(MediaItem.fromUri("asset:///solomon_temple.mp4"))
+            prepare()
+            playWhenReady = true
+            repeatMode = ExoPlayer.REPEAT_MODE_ALL
+        }
         playerView.player = exoPlayer
-
-        // Set the media item (video from assets)
-        val mediaItem = MediaItem.fromUri("file:///android_asset/solomon_temple.mp4")
-        exoPlayer.setMediaItem(mediaItem)
-
-        // Prepare and play the video
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
     }
 
     private fun setupViewPager() {
-        val viewPager = findViewById<ViewPager2>(R.id.view_pager)
-        val tabLayout = findViewById<TabLayout>(R.id.tab_layout)
+        val viewPager: ViewPager2 = findViewById(R.id.view_pager)
+        val tabLayout: TabLayout = findViewById(R.id.tab_layout)
 
-        // List of prayers
         val prayers = listOf(
-            "And now, God of Israel, let your word that you promised your servant David my father come true.\n\n1 Kings 8:26",
-            "But will God really dwell on earth? The heavens, even the highest heaven, cannot contain you. How much less this temple I have built!\n\n1 Kings 8:27",
-            "Yet give attention to your servant’s prayer and his plea for mercy, Lord my God. Hear the cry and the prayer that your servant is praying in your presence this day.\n\n1 Kings 8:28",
-            "May your eyes be open toward this temple night and day, this place of which you said, ‘My Name shall be there,’ so that you will hear the prayer your servant prays toward this place.\n\n1 Kings 8:29"
+            getString(R.string.prayer_1),
+            getString(R.string.prayer_2),
+            getString(R.string.prayer_3),
+            getString(R.string.prayer_4)
         )
 
-        // Set up the adapter
-        val adapter = PrayerAdapter(prayers)
-        viewPager.adapter = adapter
+        viewPager.adapter = PrayerAdapter(prayers)
 
-        // Connect TabLayout with ViewPager2 for dots
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
-            // No tab text needed, just dots
+            tab.text = "${getString(R.string.prayer)} ${position + 1}"
         }.attach()
+    }
+
+    private fun checkPermissions() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED -> startLocationUpdates()
+
+            else -> locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
+    private fun startLocationUpdates() {
+        try {
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+        } catch (e: SecurityException) {
+            Log.e("MainActivity", "Location permission revoked", e)
+        }
+    }
+
+    private fun calculateBearing(userLat: Double, userLon: Double): Float {
+        val φ1 = userLat.toRadians()
+        val φ2 = jerusalemLat.toRadians()
+        val Δλ = (jerusalemLon - userLon).toRadians()
+
+        val y = sin(Δλ) * cos(φ2)
+        val x = cos(φ1) * sin(φ2) - sin(φ1) * cos(φ2) * cos(Δλ)
+        return ((atan2(y, x).toDegrees() + 360) % 360).toFloat()
+    }
+
+    private fun updateCompass() {
+        val direction = (viewModel.targetBearing - viewModel.currentHeading + 360) % 360
+        compassView.direction = direction
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> System.arraycopy(
+                event.values, 0,
+                accelerometerReading, 0, 3
+            )
+            Sensor.TYPE_MAGNETIC_FIELD -> System.arraycopy(
+                event.values, 0,
+                magnetometerReading, 0, 3
+            )
+        }
+
+        if (SensorManager.getRotationMatrix(rotationMatrix, null, accelerometerReading, magnetometerReading)) {
+            SensorManager.getOrientation(rotationMatrix, orientationAngles)
+
+            // This converts the azimuth (orientationAngles[0]) from radians to degrees,
+            // ensures positive value (0-360), and updates the ViewModel
+            viewModel.currentHeading = (orientationAngles[0].toDouble().toDegrees() + 360).toFloat() % 360
+
+            // Then update the compass display
+            updateCompass()
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    override fun onPause() {
+        super.onPause()
+        exoPlayer.pause()
+        sensorManager.unregisterListener(this)
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        exoPlayer.play()
+        registerSensors()
+        checkPermissions()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         exoPlayer.release()
+        sensorManager.unregisterListener(this)
     }
+
+    // Extension functions for cleaner math conversions
+    private fun Double.toRadians() = Math.toRadians(this)
+    private fun Double.toDegrees() = Math.toDegrees(this)
 }
