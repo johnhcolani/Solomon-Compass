@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="16sp"
-        android:textColor="#E6E3E0"
+        android:textColor="#E7D1BA"
         android:gravity="center"
         android:lineSpacingExtra="8dp"/>
 

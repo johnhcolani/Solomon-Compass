@@ -84,7 +84,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun initializeComponents() {
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        compassView = findViewById(R.id.compass_view)
+        compassView = findViewById<CompassView>(R.id.compass_view).apply {
+            setBorderColor(android.graphics.Color.WHITE)
+            setBorderWidth(4f)
+            // Set the arrow image
+            setArrowImage(R.drawable.compass_arrow)
+        }
 
         registerSensors()
     }

@@ -3,4 +3,6 @@
 
     <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <!-- Optional: Customize if needed -->
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
     </style></resources>
